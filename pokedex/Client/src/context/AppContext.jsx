@@ -1,4 +1,8 @@
 import { createContext, useContext, useState, useRef } from 'react'
+import * as userService from '../services/userService'
+import * as childService from '../services/childService'
+import * as appService from '../services/appService'
+import * as deviceService from '../services/deviceService'
 
 const AppContext = createContext(null)
 
@@ -170,13 +174,41 @@ const PARENT_SCREEN_TIME = [
   },
 ]
 
+function buildChildObject(parentProfile, childProfile, apps, devices, restrictions) {
+  // Build stoppedApps and require-flag map from App_Restrictions rows
+  const stoppedApps = {}
+  const restrictionMap = {}
+  restrictions.forEach(r => {
+    restrictionMap[r.app_name] = r
+    if (!r.is_allowed) stoppedApps[r.app_name] = true
+  })
+
+  // Merge persist require flags into time-restricted app objects
+  const timeRestrictedWithFlags = apps.timeRestricted.map(app => ({
+    ...app,
+    requirePassword: restrictionMap[app.name]?.require_password ?? false,
+    requireEmail: restrictionMap[app.name]?.require_email ?? false,
+  }))
+
+  return {
+    id: childProfile.id,
+    parentProfileId: parentProfile.id,
+    child_id: parentProfile.child_id,
+    name: childProfile.child_name,
+    screenTimeHistory: SCREEN_TIME_HISTORY, // intentionally mock — no history table in schema
+    dailyGoalMinutes: null,                  // intentionally session-only — schema has boolean, not integer
+    stoppedApps,
+    devices,
+    apps: { ...apps, timeRestricted: timeRestrictedWithFlags },
+  }
+}
+
 export function AppProvider({ children }) {
-  const [registeredUsers, setRegisteredUsers] = useState([])
-  const [pendingUser, setPendingUser] = useState(null)
   const [currentUser, setCurrentUser] = useState(null)
   const [children_, setChildren] = useState([])
   const [activityLog, setActivityLog] = useState([])
-  // Tracks which (childId:appName) pairs have had their restriction set at least once
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
   const configuredRestrictions = useRef(new Set())
 
   function logActivity(childName, appName, action) {
@@ -192,155 +224,257 @@ export function AppProvider({ children }) {
     }, ...prev])
   }
 
-  function startRegistration(userData) {
-    setPendingUser(userData)
-  }
-
-  function confirmEmail() {
-    if (!pendingUser) return false
-    setRegisteredUsers(prev => [...prev, pendingUser])
-    setPendingUser(null)
-    return true
-  }
-
-  function login(usernameOrEmail, password) {
-    const user = registeredUsers.find(
-      u =>
-        (u.username === usernameOrEmail || u.email === usernameOrEmail) &&
-        u.password === password
-    )
-    if (user) {
-      setCurrentUser(user)
-      return true
+  async function registerUser(userData) {
+    try {
+      const user = await userService.createUser(userData)
+      return { user }
+    } catch (err) {
+      return { error: err.response?.data?.message || err.message }
     }
-    return false
+  }
+
+  async function login(usernameOrEmail, password) {
+    try {
+      setLoading(true)
+      setError(null)
+      const user = await userService.findUser(usernameOrEmail, password)
+      if (!user) return false
+
+      setCurrentUser(user)
+
+      // Load all children and their apps from Supabase
+      const childPairs = await childService.fetchChildren(user.id)
+      const populated = await Promise.all(
+        childPairs.map(async ({ parentProfile, childProfile }) => {
+          const [apps, devices, restrictions] = await Promise.all([
+            appService.fetchAppsForChild(childProfile.id),
+            deviceService.fetchDevicesForChild(childProfile.id),
+            appService.fetchAppRestrictions(childProfile.id),
+          ])
+          return buildChildObject(parentProfile, childProfile, apps, devices, restrictions)
+        })
+      )
+      setChildren(populated)
+      return true
+    } catch (err) {
+      setError(err.response?.data?.message || err.message)
+      return false
+    } finally {
+      setLoading(false)
+    }
   }
 
   function logout() {
     setCurrentUser(null)
-  }
-
-  function findUserByEmail(email) {
-    return registeredUsers.find(u => u.email.toLowerCase() === email.toLowerCase()) || null
-  }
-
-  function resetPassword(email, newPassword) {
-    setRegisteredUsers(prev =>
-      prev.map(u =>
-        u.email.toLowerCase() === email.toLowerCase() ? { ...u, password: newPassword } : u
-      )
-    )
-    if (currentUser?.email?.toLowerCase() === email.toLowerCase()) {
-      setCurrentUser(prev => ({ ...prev, password: newPassword }))
-    }
-  }
-
-  function deleteAccount() {
-    setRegisteredUsers(prev => prev.filter(u => u.username !== currentUser?.username))
     setChildren([])
-    setCurrentUser(null)
+    setActivityLog([])
+    configuredRestrictions.current.clear()
   }
 
-  function updateParentProfile(updates) {
-    setCurrentUser(prev => ({ ...prev, ...updates }))
-    setRegisteredUsers(prev =>
-      prev.map(u => (u.username === currentUser.username ? { ...u, ...updates } : u))
-    )
-  }
-
-  function changePassword(currentPw, newPw) {
-    if (currentUser.password !== currentPw) return false
-    const updates = { password: newPw }
-    setCurrentUser(prev => ({ ...prev, ...updates }))
-    setRegisteredUsers(prev =>
-      prev.map(u => (u.username === currentUser.username ? { ...u, ...updates } : u))
-    )
-    return true
-  }
-
-  function addChild(childData) {
-    const newChild = {
-      id: Date.now(),
-      name: childData.name,
-      screenTimeHistory: SCREEN_TIME_HISTORY,
-      dailyGoalMinutes: null,
-      stoppedApps: {},
-      devices: [],
-      apps: {
-        timeRestricted: childData.timeRestrictedApps
-          .split(',')
-          .map(a => a.trim())
-          .filter(Boolean)
-          .map(name => ({ name, hours: 1, minutes: 0, requirePassword: false, requireEmail: false })),
-        timeUnlimited: childData.timeUnlimitedApps
-          .split(',')
-          .map(a => a.trim())
-          .filter(Boolean),
-        unauthorized: childData.unauthorizedApps
-          .split(',')
-          .map(a => a.trim())
-          .filter(Boolean),
-      },
+  async function findUserByEmail(email) {
+    try {
+      return await userService.findUserByEmail(email)
+    } catch {
+      return null
     }
-    setChildren(prev => [...prev, newChild])
-    return newChild.id
   }
 
-  function removeChild(childId) {
-    setChildren(prev => prev.filter(c => c.id !== Number(childId)))
+  async function resetPassword(email, newPassword) {
+    try {
+      const user = await userService.findUserByEmail(email)
+      if (!user) return
+      await userService.updateUser(user.id, { password: newPassword })
+      if (currentUser?.email?.toLowerCase() === email.toLowerCase()) {
+        setCurrentUser(prev => ({ ...prev, password: newPassword }))
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || err.message)
+    }
   }
 
-  function updateChildName(childId, newName) {
-    setChildren(prev =>
-      prev.map(c => (c.id === Number(childId) ? { ...c, name: newName } : c))
-    )
+  async function deleteAccount() {
+    try {
+      setLoading(true)
+      // Delete all children first
+      await Promise.all(children_.map(c =>
+        childService.deleteChild(c.id, c.parentProfileId)
+      ))
+      await userService.deleteUser(currentUser.id)
+      setChildren([])
+      setCurrentUser(null)
+    } catch (err) {
+      setError(err.response?.data?.message || err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function updateParentProfile(updates) {
+    try {
+      const mapped = {}
+      if (updates.firstName !== undefined) mapped.first_name = updates.firstName
+      if (updates.preferredName !== undefined) mapped.preferred_name = updates.preferredName
+      if (updates.username !== undefined) mapped.username = updates.username
+      if (updates.email !== undefined) mapped.email = updates.email
+      await userService.updateUser(currentUser.id, mapped)
+      setCurrentUser(prev => ({ ...prev, ...mapped, ...updates }))
+    } catch (err) {
+      setError(err.response?.data?.message || err.message)
+      throw err
+    }
+  }
+
+  async function changePassword(currentPw, newPw) {
+    if (currentUser.password !== currentPw) return false
+    try {
+      await userService.updateUser(currentUser.id, { password: newPw })
+      setCurrentUser(prev => ({ ...prev, password: newPw }))
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  async function addChild(childData) {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const { parentProfile, childProfile } = await childService.createChild(
+        currentUser.id,
+        childData.name
+      )
+
+      const restrictedNames = childData.timeRestrictedApps
+        .split(',').map(a => a.trim()).filter(Boolean)
+      const unlimitedNames = childData.timeUnlimitedApps
+        .split(',').map(a => a.trim()).filter(Boolean)
+      const unauthorizedNames = childData.unauthorizedApps
+        .split(',').map(a => a.trim()).filter(Boolean)
+
+      const [restrictedRows, unlimitedRows, unauthorizedRows] = await Promise.all([
+        Promise.all(restrictedNames.map(name =>
+          appService.addTimeRestrictedApp(childProfile.id, name, 60)
+        )),
+        Promise.all(unlimitedNames.map(name =>
+          appService.addTimeUnlimitedApp(childProfile.id, name)
+        )),
+        Promise.all(unauthorizedNames.map(name =>
+          appService.addUnauthorizedApp(childProfile.id, name)
+        )),
+      ])
+
+      const apps = {
+        timeRestricted: restrictedRows.map(row => ({
+          id: row.id,
+          name: row.app_name,
+          hours: 1,
+          minutes: 0,
+          requirePassword: false,
+          requireEmail: false,
+        })),
+        timeUnlimited: unlimitedRows.map(row => ({ id: row.id, name: row.app_name })),
+        unauthorized: unauthorizedRows.map(row => ({ id: row.id, name: row.app_name })),
+      }
+
+      const newChild = buildChildObject(parentProfile, childProfile, apps, [], [])
+      setChildren(prev => [...prev, newChild])
+      return newChild.id
+    } catch (err) {
+      setError(err.response?.data?.message || err.message)
+      return null
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function removeChild(childId) {
+    const child = children_.find(c => c.id === childId)
+    if (!child) return
+    try {
+      setLoading(true)
+      await childService.deleteChild(child.id, child.parentProfileId)
+      setChildren(prev => prev.filter(c => c.id !== childId))
+    } catch (err) {
+      setError(err.response?.data?.message || err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function updateChildName(childId, newName) {
+    const child = children_.find(c => c.id === childId)
+    if (!child) return
+    try {
+      await childService.updateChildName(child.id, newName)
+      setChildren(prev =>
+        prev.map(c => (c.id === childId ? { ...c, name: newName } : c))
+      )
+    } catch (err) {
+      setError(err.response?.data?.message || err.message)
+    }
   }
 
   function setChildGoal(childId, minutes) {
     setChildren(prev =>
-      prev.map(c => (c.id === Number(childId) ? { ...c, dailyGoalMinutes: minutes } : c))
+      prev.map(c => (c.id === childId ? { ...c, dailyGoalMinutes: minutes } : c))
     )
   }
 
-  function toggleStopApp(childId, appName) {
-    const child = children_.find(c => c.id === Number(childId))
+  async function toggleStopApp(childId, appName) {
+    const child = children_.find(c => c.id === childId)
     const isStopping = child ? !child.stoppedApps[appName] : true
-    setChildren(prev =>
-      prev.map(c => {
-        if (c.id !== Number(childId)) return c
-        const stopped = { ...c.stoppedApps }
-        stopped[appName] = !stopped[appName]
-        return { ...c, stoppedApps: stopped }
-      })
-    )
-    if (child) {
-      logActivity(child.name, appName,
-        isStopping
-          ? `Stopped ${appName} for ${child.name}`
-          : `Resumed ${appName} for ${child.name}`)
+    try {
+      await appService.upsertAppRestriction(childId, appName, { is_allowed: !isStopping })
+      setChildren(prev =>
+        prev.map(c => {
+          if (c.id !== childId) return c
+          return { ...c, stoppedApps: { ...c.stoppedApps, [appName]: isStopping } }
+        })
+      )
+      if (child) {
+        logActivity(child.name, appName,
+          isStopping
+            ? `Stopped ${appName} for ${child.name}`
+            : `Resumed ${appName} for ${child.name}`)
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || err.message)
     }
   }
 
-  function updateAppRestriction(childId, appName, updates) {
-    const child = children_.find(c => c.id === Number(childId))
-    setChildren(prev =>
-      prev.map(c => {
-        if (c.id !== Number(childId)) return c
-        return {
-          ...c,
-          apps: {
-            ...c.apps,
-            timeRestricted: c.apps.timeRestricted.map(app =>
-              app.name === appName ? { ...app, ...updates } : app
-            ),
-          },
-        }
+  async function updateAppRestriction(childId, appName, updates) {
+    const child = children_.find(c => c.id === childId)
+    if (!child) return
+
+    const existing = child.apps.timeRestricted.find(a => a.name === appName)
+    if (!existing) return
+
+    const newH = updates.hours ?? existing.hours ?? 0
+    const newM = updates.minutes ?? existing.minutes ?? 0
+    const totalMinutes = newH * 60 + newM
+
+    try {
+      await appService.updateTimeRestrictedApp(existing.id, totalMinutes)
+      await appService.upsertAppRestriction(childId, appName, {
+        require_password: updates.requirePassword ?? existing.requirePassword ?? false,
+        require_email: updates.requireEmail ?? existing.requireEmail ?? false,
       })
-    )
-    if (child && (updates.hours !== undefined || updates.minutes !== undefined)) {
-      const existing = child.apps.timeRestricted.find(a => a.name === appName)
-      const newH = updates.hours ?? existing?.hours ?? 0
-      const newM = updates.minutes ?? existing?.minutes ?? 0
+      setChildren(prev =>
+        prev.map(c => {
+          if (c.id !== childId) return c
+          return {
+            ...c,
+            apps: {
+              ...c.apps,
+              timeRestricted: c.apps.timeRestricted.map(app =>
+                app.name === appName ? { ...app, ...updates } : app
+              ),
+            },
+          }
+        })
+      )
+
       const timeParts = []
       if (newH > 0) timeParts.push(`${newH} hr${newH !== 1 ? 's' : ''}`)
       if (newM > 0) timeParts.push(`${newM} min`)
@@ -355,101 +489,150 @@ export function AppProvider({ children }) {
         logActivity(child.name, appName,
           `You added an additional ${timeStr} to ${child.name}'s ${appName} time`)
       }
+    } catch (err) {
+      setError(err.response?.data?.message || err.message)
     }
   }
 
-  function removeApp(childId, listType, appName) {
+  async function removeApp(childId, listType, appName) {
+    const child = children_.find(c => c.id === childId)
+    if (!child) return
+
+    const list = child.apps[listType]
+    let appId
+
     if (listType === 'timeRestricted') {
-      configuredRestrictions.current.delete(`${childId}:${appName}`)
+      appId = list.find(a => a.name === appName)?.id
+    } else {
+      appId = list.find(a => a.name === appName)?.id
     }
-    const child = children_.find(c => c.id === Number(childId))
-    setChildren(prev =>
-      prev.map(c => {
-        if (c.id !== Number(childId)) return c
-        const list = c.apps[listType]
-        const updated =
-          listType === 'timeRestricted'
-            ? list.filter(a => a.name !== appName)
-            : list.filter(a => a !== appName)
-        return { ...c, apps: { ...c.apps, [listType]: updated } }
-      })
-    )
-    if (child) {
-      const action =
-        listType === 'unauthorized'
-          ? `${child.name}'s access to ${appName} has been unblocked`
-          : listType === 'timeUnlimited'
-          ? `${child.name}'s unlimited access to ${appName} has been removed`
-          : `You removed ${appName} from ${child.name}'s restricted apps`
-      logActivity(child.name, appName, action)
+
+    try {
+      if (appId) {
+        if (listType === 'timeRestricted') await appService.deleteTimeRestrictedApp(appId)
+        else if (listType === 'timeUnlimited') await appService.deleteTimeUnlimitedApp(appId)
+        else if (listType === 'unauthorized') await appService.deleteUnauthorizedApp(appId)
+      }
+      // Best-effort cleanup of any App_Restrictions metadata for this app
+      try {
+        await appService.deleteAppRestriction(childId, appName)
+      } catch { /* no restriction row is fine */ }
+
+      setChildren(prev =>
+        prev.map(c => {
+          if (c.id !== childId) return c
+          const updated =
+            listType === 'timeRestricted'
+              ? list.filter(a => a.name !== appName)
+              : list.filter(a => a.name !== appName)
+          return { ...c, apps: { ...c.apps, [listType]: updated } }
+        })
+      )
+
+      if (child) {
+        const action =
+          listType === 'unauthorized'
+            ? `${child.name}'s access to ${appName} has been unblocked`
+            : listType === 'timeUnlimited'
+            ? `${child.name}'s unlimited access to ${appName} has been removed`
+            : `You removed ${appName} from ${child.name}'s restricted apps`
+        logActivity(child.name, appName, action)
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || err.message)
     }
   }
 
-  function addApp(childId, listType, appName) {
+  async function addApp(childId, listType, appName) {
     const trimmed = appName.trim()
     if (!trimmed) return
-    const child = children_.find(c => c.id === Number(childId))
-    setChildren(prev =>
-      prev.map(c => {
-        if (c.id !== Number(childId)) return c
-        const list = c.apps[listType]
-        const alreadyExists =
-          listType === 'timeRestricted'
-            ? list.some(a => a.name.toLowerCase() === trimmed.toLowerCase())
-            : list.some(a => a.toLowerCase() === trimmed.toLowerCase())
-        if (alreadyExists) return c
-        const newEntry =
-          listType === 'timeRestricted'
-            ? { name: trimmed, hours: 1, minutes: 0, requirePassword: false, requireEmail: false }
-            : trimmed
-        return { ...c, apps: { ...c.apps, [listType]: [...list, newEntry] } }
-      })
-    )
-    if (child) {
-      const actionMap = {
-        timeRestricted: `You set ${child.name}'s ${trimmed} restrictions to 1 hr 0 min`,
-        timeUnlimited: `${child.name}'s access to ${trimmed} has been approved with unlimited time`,
-        unauthorized: `${child.name}'s access to ${trimmed} has been blocked`,
+    const child = children_.find(c => c.id === childId)
+    if (!child) return
+
+    const list = child.apps[listType]
+    const alreadyExists = list.some(a => a.name.toLowerCase() === trimmed.toLowerCase())
+    if (alreadyExists) return
+
+    try {
+      let newEntry
+      if (listType === 'timeRestricted') {
+        const row = await appService.addTimeRestrictedApp(child.id, trimmed, 60)
+        newEntry = { id: row.id, name: row.app_name, hours: 1, minutes: 0, requirePassword: false, requireEmail: false }
+      } else if (listType === 'timeUnlimited') {
+        const row = await appService.addTimeUnlimitedApp(child.id, trimmed)
+        newEntry = { id: row.id, name: row.app_name }
+      } else if (listType === 'unauthorized') {
+        const row = await appService.addUnauthorizedApp(child.id, trimmed)
+        newEntry = { id: row.id, name: row.app_name }
       }
-      logActivity(child.name, trimmed, actionMap[listType])
+
+      setChildren(prev =>
+        prev.map(c => {
+          if (c.id !== childId) return c
+          return { ...c, apps: { ...c.apps, [listType]: [...c.apps[listType], newEntry] } }
+        })
+      )
+
+      if (child) {
+        const actionMap = {
+          timeRestricted: `You set ${child.name}'s ${trimmed} restrictions to 1 hr 0 min`,
+          timeUnlimited: `${child.name}'s access to ${trimmed} has been approved with unlimited time`,
+          unauthorized: `${child.name}'s access to ${trimmed} has been blocked`,
+        }
+        logActivity(child.name, trimmed, actionMap[listType])
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || err.message)
     }
   }
 
-  function addDevice(childId, deviceName) {
+  async function addDevice(childId, deviceName) {
     const trimmed = deviceName.trim()
     if (!trimmed) return
-    setChildren(prev =>
-      prev.map(child => {
-        if (child.id !== Number(childId)) return child
-        if (child.devices.some(d => d.name.toLowerCase() === trimmed.toLowerCase())) return child
-        return { ...child, devices: [...child.devices, { id: Date.now(), name: trimmed }] }
-      })
-    )
+    const child = children_.find(c => c.id === childId)
+    if (!child) return
+    if (child.devices.some(d => d.name.toLowerCase() === trimmed.toLowerCase())) return
+    try {
+      const newDevice = await deviceService.addDevice(child.id, trimmed)
+      setChildren(prev =>
+        prev.map(c => {
+          if (c.id !== childId) return c
+          return { ...c, devices: [...c.devices, newDevice] }
+        })
+      )
+    } catch (err) {
+      setError(err.response?.data?.message || err.message)
+    }
   }
 
-  function removeDevice(childId, deviceId) {
-    setChildren(prev =>
-      prev.map(child => {
-        if (child.id !== Number(childId)) return child
-        return { ...child, devices: child.devices.filter(d => d.id !== deviceId) }
-      })
-    )
+  async function removeDevice(childId, deviceId) {
+    try {
+      await deviceService.removeDevice(deviceId)
+      setChildren(prev =>
+        prev.map(c => {
+          if (c.id !== childId) return c
+          return { ...c, devices: c.devices.filter(d => d.id !== deviceId) }
+        })
+      )
+    } catch (err) {
+      setError(err.response?.data?.message || err.message)
+    }
   }
 
   function getChild(childId) {
-    return children_.find(c => c.id === Number(childId)) || null
+    return children_.find(c => c.id === childId) || null
   }
 
   return (
     <AppContext.Provider
       value={{
         currentUser,
-        pendingUser,
         children: children_,
         parentScreenTime: PARENT_SCREEN_TIME,
         activityLog,
-        startRegistration,
-        confirmEmail,
+        loading,
+        error,
+        registerUser,
         login,
         logout,
         findUserByEmail,
@@ -475,6 +658,7 @@ export function AppProvider({ children }) {
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useApp() {
   return useContext(AppContext)
 }
