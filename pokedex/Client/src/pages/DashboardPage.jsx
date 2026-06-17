@@ -135,6 +135,27 @@ export default function DashboardPage() {
     <div className="dashboard-layout">
       <Navbar />
       <main className="dashboard-main">
+        {/* ── Prototype notice ── */}
+        <div style={{
+          background: 'rgba(240, 89, 42, 0.08)',
+          border: '1px solid rgba(240, 89, 42, 0.35)',
+          borderRadius: '10px',
+          padding: '0.85rem 1.1rem',
+          marginBottom: '1.5rem',
+          display: 'flex',
+          gap: '0.75rem',
+          alignItems: 'flex-start',
+        }}>
+          <span style={{ fontSize: '1.1rem', lineHeight: 1, marginTop: '0.05rem' }}>🚧</span>
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
+            <strong style={{ color: 'var(--accent-orange)' }}>Prototype notice:</strong>{' '}
+            Zap App is currently a prototype and does not yet actually track users&rsquo; time
+            on the internet or on specific apps. The screen-time data shown is simulated.
+            The creator has not yet learned how to integrate real device tracking into the
+            app &mdash; that feature is planned for a future release.
+          </p>
+        </div>
+
         <div className="dashboard-header">
           <div>
             <h1 className="dashboard-title">

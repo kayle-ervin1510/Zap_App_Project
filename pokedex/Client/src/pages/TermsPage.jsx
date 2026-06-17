@@ -59,7 +59,7 @@ export default function TermsPage() {
           <p>
             Please note that the Zap App collects data on how long users spend on their devices and their
             apps. We do not use this data for anything, other than allowing parents to see how long and how
-            often the child is on their device, and what apps they most frequent.
+            often the child is on their device, and which apps they frequent most.
           </p>
 
           <p>
