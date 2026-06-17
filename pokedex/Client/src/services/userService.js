@@ -31,7 +31,8 @@ export async function findUser(usernameOrEmail, password) {
   }
 
   const { data: authData, error } = await supabase.auth.signInWithPassword({ email, password })
-  if (error || !authData.user) return null
+  if (error) throw error
+  if (!authData.user) return null
 
   const { data: rows } = await api.get('/Users', { params: { id: `eq.${authData.user.id}` } })
   return rows?.[0] || null

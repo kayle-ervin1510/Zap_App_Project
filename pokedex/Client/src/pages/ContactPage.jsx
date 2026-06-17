@@ -66,11 +66,11 @@ export default function ContactPage() {
               <h2 className="faq-title">Quick Help</h2>
               <ul className="faq-list">
                 <li className="faq-item">
-                  <span className="faq-q">How do I reset my child's screen time?</span>
+                  <span className="faq-q">How do I change my child's screen time limit?</span>
                   <p className="faq-a">
-                    Screen time resets automatically at midnight each day. You
-                    can adjust daily limits from Manage Apps on your child&rsquo;s
-                    profile.
+                    Screen time limits are permanent until you change them. You
+                    can adjust per-app limits at any time from Manage Apps on
+                    your child&rsquo;s profile.
                   </p>
                 </li>
                 <li className="faq-item">

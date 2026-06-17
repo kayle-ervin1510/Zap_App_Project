@@ -1,13 +1,15 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useLocation } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { login, currentUser } = useApp()
 
   const [form, setForm] = useState({ usernameOrEmail: '', password: '' })
   const [error, setError] = useState('')
+  const signupSuccess = location.state?.signupSuccess
 
   if (currentUser) {
     navigate('/dashboard', { replace: true })
@@ -25,11 +27,16 @@ export default function LoginPage() {
       setError('Please enter your username/email and password.')
       return
     }
-    const ok = await login(form.usernameOrEmail, form.password)
-    if (ok) {
+    const result = await login(form.usernameOrEmail, form.password)
+    if (result.ok) {
       navigate('/dashboard')
     } else {
-      setError('Invalid credentials. Check your username/email and password.')
+      const msg = result.error || ''
+      if (msg.toLowerCase().includes('email not confirmed')) {
+        setError('Your email address has not been confirmed yet. Please check your inbox for the confirmation code.')
+      } else {
+        setError('Invalid credentials. Check your username/email and password.')
+      }
     }
   }
 
@@ -49,6 +56,7 @@ export default function LoginPage() {
         <p className="page-title">Welcome Back</p>
         <p className="page-subtitle">Sign in to manage your children&rsquo;s screen time.</p>
 
+        {signupSuccess && <div className="alert alert-success">Account created! Sign in below.</div>}
         {error && <div className="alert alert-error">{error}</div>}
 
         <form onSubmit={handleSubmit}>

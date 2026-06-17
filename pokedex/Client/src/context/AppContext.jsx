@@ -258,12 +258,18 @@ export function AppProvider({ children }) {
     }
   }
 
+  async function verifyEmail(email, token) {
+    const { error } = await supabase.auth.verifyOtp({ email, token, type: 'email' })
+    if (error) return { error: error.message }
+    return { ok: true }
+  }
+
   async function login(usernameOrEmail, password) {
     try {
       setLoading(true)
       setError(null)
       const user = await userService.findUser(usernameOrEmail, password)
-      if (!user) return false
+      if (!user) return { ok: false, error: 'Invalid credentials' }
 
       setCurrentUser(user)
 
@@ -280,10 +286,11 @@ export function AppProvider({ children }) {
         })
       )
       setChildren(populated)
-      return true
+      return { ok: true }
     } catch (err) {
-      setError(err.response?.data?.message || err.message)
-      return false
+      const msg = err.response?.data?.message || err.message || 'Unknown error'
+      setError(msg)
+      return { ok: false, error: msg }
     } finally {
       setLoading(false)
     }
@@ -669,6 +676,7 @@ export function AppProvider({ children }) {
         loading,
         error,
         registerUser,
+        verifyEmail,
         login,
         logout,
         findUserByEmail,

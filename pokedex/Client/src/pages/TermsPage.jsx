@@ -1,11 +1,15 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { useApp } from '../context/AppContext'
 
 export default function TermsPage() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { registerUser } = useApp()
   const form = location.state?.form
   const [agreed, setAgreed] = useState(false)
+  const [regLoading, setRegLoading] = useState(false)
+  const [regError, setRegError] = useState('')
 
   if (!form) {
     return (
@@ -86,13 +90,39 @@ export default function TermsPage() {
           <span>I agree to the Terms and Conditions</span>
         </label>
 
+        {regError && <div className="alert alert-error" style={{ marginBottom: '0.75rem' }}>{regError}</div>}
+
         <button
           className="btn btn-primary"
-          onClick={() => navigate('/confirm', { state: { form } })}
-          disabled={!agreed}
-          style={{ opacity: agreed ? 1 : 0.45, cursor: agreed ? 'pointer' : 'not-allowed', marginTop: '1rem' }}
+          onClick={async () => {
+            setRegError('')
+            setRegLoading(true)
+            const result = await registerUser(form)
+            setRegLoading(false)
+            if (result.error) {
+              const msg = result.error
+              if (msg.includes('already registered') || msg.includes('already been registered')) {
+                setRegError('An account with that email already exists. Try logging in.')
+              } else if (msg.includes('username')) {
+                setRegError('That username is already taken.')
+              } else {
+                setRegError(msg)
+              }
+              return
+            }
+            // If Supabase auto-confirmed the account (email confirmation disabled),
+            // skip the OTP screen and go straight to login.
+            const alreadyConfirmed = !!result.user?.email_confirmed_at
+            if (alreadyConfirmed) {
+              navigate('/login', { state: { signupSuccess: true } })
+            } else {
+              navigate('/confirm', { state: { form } })
+            }
+          }}
+          disabled={!agreed || regLoading}
+          style={{ opacity: (agreed && !regLoading) ? 1 : 0.45, cursor: (agreed && !regLoading) ? 'pointer' : 'not-allowed', marginTop: '1rem' }}
         >
-          Continue →
+          {regLoading ? 'Creating account…' : 'Continue →'}
         </button>
 
         <button className="btn btn-ghost" onClick={() => navigate('/signup')}>

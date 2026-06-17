@@ -26,7 +26,11 @@ React Router DOM v7. Two wrapper components gate every route:
 
 Auth routes (public): `/login`, `/signup`, `/terms`, `/confirm`, `/forgot-password`
 
-Protected routes: `/dashboard`, `/dashboard/new-child`, `/dashboard/:childId/overview`, `/dashboard/:childId/apps`, `/dashboard/:childId/edit/:appName`, `/contact`, `/profile`, `/biometrics`
+Protected routes: `/dashboard`, `/dashboard/new-child`, `/dashboard/:childId/overview` (→ `ScreenTimePage`), `/dashboard/:childId/apps`, `/dashboard/:childId/edit/:appName`, `/contact`, `/profile`, `/biometrics`, `/donate`
+
+Catch-all `*` and root `/` both redirect to `/login`.
+
+`App.jsx` also renders a floating "Buy Me a Milk" button (fixed, bottom-right) that is visible only when `currentUser` is set — it links to `/donate`.
 
 ### Global state (`src/context/AppContext.jsx`)
 Single React context (`AppContext`) wraps the entire tree. `useApp()` is the only way components access shared state. The context owns:
@@ -34,8 +38,31 @@ Single React context (`AppContext`) wraps the entire tree. `useApp()` is the onl
 - `children` — array of child objects loaded from Supabase, each containing `apps`, `devices`, `stoppedApps`, and `screenTimeHistory`
 - `activityLog` — in-memory log of parent actions (not persisted)
 - `parentScreenTime` / child `screenTimeHistory` — **mock data** hardcoded in the context; no history table exists in the schema
+- `loading` / `error` — set/cleared around every async mutation; pages can read these for UI feedback
 
-`buildChildObject()` in the context merges `Parent_Profile`, `Children_Profile`, app rows, device rows, and `App_Restrictions` into a single in-memory child object that the UI works with.
+**Session restoration:** On mount, `AppContext` calls `supabase.auth.getSession()`. If a session exists, it fetches the `Users` row and all children in parallel, then sets `currentUser`. If the fetch fails, the user is left logged out (silent failure).
+
+**Key mutations exported from context:**
+
+| Method | Description |
+|---|---|
+| `login(usernameOrEmail, password)` | Resolves username → email via `get_email_by_username` RPC, then calls `signInWithPassword` |
+| `logout()` | Signs out, clears state, resets `configuredRestrictions` |
+| `registerUser(userData)` | Creates `auth.users` + `Users` + `Parent_Profile` rows |
+| `resetPassword(email)` | Calls `supabase.auth.resetPasswordForEmail` |
+| `changePassword(currentPw, newPw)` | Re-authenticates before calling `updateUser` |
+| `updateParentProfile(updates)` | Syncs email changes to both Supabase Auth and the `Users` table |
+| `deleteAccount()` | Deletes children rows first, then calls `delete_user_account()` RPC (cascades `auth.users`) |
+| `getChild(childId)` | Selector — finds a child in `children` by id |
+| `addChild` / `updateChildName(childId, newName)` / `removeChild(childId)` | Child CRUD, updates local `children` array |
+| `addApp(childId, listType, appName)` | Adds an app to `time-restricted`, `time-unlimited`, or `unauthorized` list |
+| `removeApp(childId, listType, appName)` | Removes an app from a list; also deletes its `App_Restrictions` row |
+| `updateAppRestriction(childId, appName, updates)` | Upserts `App_Restrictions` for a time-restricted app |
+| `toggleStopApp(childId, appName)` | Toggles app in child's `stoppedApps` set (in-memory only) |
+| `setChildGoal(childId, minutes)` | Sets `dailyGoalMinutes` on the in-memory child object (session-only) |
+| `logActivity(childName, appName, action)` | Appends to in-memory `activityLog` |
+
+`buildChildObject()` merges `Parent_Profile`, `Children_Profile`, app rows, device rows, and `App_Restrictions` into a single in-memory child object that the UI works with.
 
 `configuredRestrictions` is a `useRef<Set>` storing `"childId:appName"` strings. It controls activity-log phrasing: first call → "You set X's restrictions to…", subsequent calls → "You added an additional…". It resets on logout.
 
@@ -63,13 +90,14 @@ All table interactions go through domain services — pages and the context neve
 One file per route. Pages call `useApp()` for data and mutations; they do not call services directly.
 
 ### Styling
-Global CSS in `src/index.css` and `src/App.css`. Color scheme is derived from the Netflix show *BNA (Brand New Animal)*. No CSS framework.
+Global CSS in `src/index.css` and `src/App.css`. Color scheme is derived from the Netflix show *BNA (Brand New Animal)*. CSS custom properties defined in `index.css`: `--bg-primary` (#0a0f1e), `--bg-card` (#111d35), `--accent-orange` (#f0592a), `--accent-teal` (#3ecfcf), `--accent-purple` (#8b5cf6). Fonts: Rajdhani (brand/headings), Inter (body). Shared layout classes: `.page`, `.card`, `.card-wide`, `.step-indicator`, `.step-dot`.
 
 ## Known intentional limitations
 
 - `screenTimeHistory` and `parentScreenTime` are hardcoded mock data — no history table exists in the schema.
 - `dailyGoalMinutes` on a child is session-only (the schema stores a boolean `screen_time_goal`, not a minute count).
 - `activityLog` is in-memory only and resets on page reload.
+- `@stripe/react-stripe-js` and `@stripe/stripe-js` are installed but not yet integrated.
 
 ## Environment variables
 

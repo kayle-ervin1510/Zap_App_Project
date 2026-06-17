@@ -5,7 +5,7 @@ import { useApp } from '../context/AppContext'
 export default function ConfirmPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { registerUser } = useApp()
+  const { verifyEmail } = useApp()
   const form = location.state?.form
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
@@ -34,16 +34,10 @@ export default function ConfirmPage() {
     }
     setLoading(true)
     setError('')
-    const result = await registerUser(form)
+    const result = await verifyEmail(form.email, code.trim())
     setLoading(false)
     if (result.error) {
-      if (result.error.includes('username')) {
-        setError('That username is already taken.')
-      } else if (result.error.includes('email')) {
-        setError('An account with that email already exists.')
-      } else {
-        setError(result.error)
-      }
+      setError('Invalid or expired code. Please check your email and try again.')
       return
     }
     navigate('/login')
@@ -96,7 +90,7 @@ export default function ConfirmPage() {
 
         <div className="link-text" style={{ marginTop: '1.5rem' }}>
           <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            Hint: any code with 4+ characters works in this demo.
+            Check your email inbox for a 6-digit confirmation code from Supabase.
           </span>
         </div>
       </div>
