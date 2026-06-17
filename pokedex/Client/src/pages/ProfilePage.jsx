@@ -29,8 +29,8 @@ export default function ProfilePage() {
   const { currentUser, updateParentProfile, changePassword, deleteAccount, parentScreenTime, activityLog } = useApp()
 
   const [nameForm, setNameForm] = useState({
-    firstName: currentUser?.firstName || '',
-    preferredName: currentUser?.preferredName || '',
+    firstName: currentUser?.first_name || '',
+    preferredName: currentUser?.preferred_name || '',
   })
   const [nameSaved, setNameSaved] = useState(false)
   const [nameError, setNameError] = useState('')
@@ -46,21 +46,21 @@ export default function ProfilePage() {
   const dayData = parentScreenTime[stDay]
   const maxMinutes = Math.max(...dayData.apps.map(a => a.minutes), 1)
 
-  function handleNameSave(e) {
+  async function handleNameSave(e) {
     e.preventDefault()
     setNameError('')
     if (!nameForm.firstName.trim()) { setNameError('First name is required.'); return }
-    updateParentProfile({ firstName: nameForm.firstName.trim(), preferredName: nameForm.preferredName.trim() })
+    await updateParentProfile({ firstName: nameForm.firstName.trim(), preferredName: nameForm.preferredName.trim() })
     setNameSaved(true)
     setTimeout(() => setNameSaved(false), 2500)
   }
 
-  function handlePwSave(e) {
+  async function handlePwSave(e) {
     e.preventDefault()
     setPwError('')
     if (pwForm.next.length < 6) { setPwError('New password must be at least 6 characters.'); return }
     if (pwForm.next !== pwForm.confirm) { setPwError('New passwords do not match.'); return }
-    const ok = changePassword(pwForm.current, pwForm.next)
+    const ok = await changePassword(pwForm.current, pwForm.next)
     if (!ok) { setPwError('Current password is incorrect.'); return }
     setPwSaved(true)
     setPwForm({ current: '', next: '', confirm: '' })
@@ -80,11 +80,11 @@ export default function ProfilePage() {
           <div className="profile-left">
             <div className="profile-avatar-block">
               <div className="profile-avatar">
-                {(currentUser?.preferredName || currentUser?.firstName || '?').charAt(0).toUpperCase()}
+                {(currentUser?.preferred_name || currentUser?.first_name || '?').charAt(0).toUpperCase()}
               </div>
               <div>
                 <p className="profile-display-name">
-                  {currentUser?.preferredName || currentUser?.firstName}
+                  {currentUser?.preferred_name || currentUser?.first_name}
                 </p>
                 <p className="profile-username">@{currentUser?.username}</p>
                 <p className="profile-email">{currentUser?.email}</p>
@@ -272,7 +272,7 @@ export default function ProfilePage() {
           {confirmDelete ? (
             <div className="danger-confirm-box">
               <p>Are you sure? All your data and your children&rsquo;s profiles will be erased permanently.</p>
-              <button className="btn-danger-confirm" onClick={() => { deleteAccount(); navigate('/login') }}>
+              <button className="btn-danger-confirm" onClick={async () => { await deleteAccount(); navigate('/login') }}>
                 Yes, Delete My Account
               </button>
               <button className="goal-cancel-btn" onClick={() => setConfirmDelete(false)}>Cancel</button>

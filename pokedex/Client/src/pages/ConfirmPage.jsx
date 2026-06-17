@@ -1,14 +1,17 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 
 export default function ConfirmPage() {
   const navigate = useNavigate()
-  const { pendingUser, confirmEmail } = useApp()
+  const location = useLocation()
+  const { registerUser } = useApp()
+  const form = location.state?.form
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  if (!pendingUser) {
+  if (!form) {
     return (
       <div className="page">
         <div className="card text-center">
@@ -23,16 +26,27 @@ export default function ConfirmPage() {
     )
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
     if (code.trim().length < 4) {
       setError('Please enter a valid confirmation code (at least 4 characters).')
       return
     }
-    const ok = confirmEmail()
-    if (ok) {
-      navigate('/login')
+    setLoading(true)
+    setError('')
+    const result = await registerUser(form)
+    setLoading(false)
+    if (result.error) {
+      if (result.error.includes('username')) {
+        setError('That username is already taken.')
+      } else if (result.error.includes('email')) {
+        setError('An account with that email already exists.')
+      } else {
+        setError(result.error)
+      }
+      return
     }
+    navigate('/login')
   }
 
   return (
@@ -51,7 +65,7 @@ export default function ConfirmPage() {
         <p className="page-title">Almost Done!</p>
         <p className="page-subtitle">
           To verify your account, please check the inbox of{' '}
-          <span className="text-orange">{pendingUser.email}</span> and type the
+          <span className="text-orange">{form.email}</span> and type the
           code below.
         </p>
 
@@ -75,8 +89,8 @@ export default function ConfirmPage() {
             />
           </div>
 
-          <button type="submit" className="btn btn-primary">
-            Confirm Account →
+          <button type="submit" className="btn btn-primary" disabled={loading}>
+            {loading ? 'Creating account…' : 'Confirm Account →'}
           </button>
         </form>
 

@@ -63,7 +63,7 @@ export default function ScreenTimePage() {
     e.preventDefault()
     const hrs = parseFloat(goalInput)
     if (!isNaN(hrs) && hrs > 0) {
-      setChildGoal(Number(childId), Math.round(hrs * 60))
+      setChildGoal(childId, Math.round(hrs * 60))
     }
     setEditingGoal(false)
     setGoalInput('')
@@ -206,7 +206,7 @@ export default function ScreenTimePage() {
                       {isToday && (
                         <button
                           className={`stop-app-btn${stopped ? ' stop-app-btn-resume' : ''}`}
-                          onClick={() => toggleStopApp(Number(childId), app.name)}
+                          onClick={() => toggleStopApp(childId, app.name)}
                         >
                           {stopped ? 'Resume' : 'Stop App'}
                         </button>

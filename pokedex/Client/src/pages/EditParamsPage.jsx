@@ -207,9 +207,9 @@ export default function EditParamsPage() {
                       No blocked apps for {child.name}.
                     </span>
                   ) : (
-                    child.apps.unauthorized.map(name => (
-                      <span key={name} className="app-pill app-pill-red">
-                        {name}
+                    child.apps.unauthorized.map(app => (
+                      <span key={app.id ?? app.name} className="app-pill app-pill-red">
+                        {app.name}
                       </span>
                     ))
                   )}

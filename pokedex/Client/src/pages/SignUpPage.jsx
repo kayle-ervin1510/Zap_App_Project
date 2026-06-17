@@ -1,10 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useApp } from '../context/AppContext'
 
 export default function SignUpPage() {
   const navigate = useNavigate()
-  const { startRegistration } = useApp()
 
   const [form, setForm] = useState({
     firstName: '',
@@ -40,8 +38,7 @@ export default function SignUpPage() {
       setError('Password must be at least 6 characters.')
       return
     }
-    startRegistration(form)
-    navigate('/terms')
+    navigate('/terms', { state: { form } })
   }
 
   return (

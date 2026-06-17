@@ -36,7 +36,7 @@ function SectionCard({ title, color, children }) {
 
 // ── Device verification flow ──
 // Steps: 'idle' | 'name' | 'method' | 'phone-entry' | 'phone-code' | 'install' | 'done'
-function DeviceVerifyFlow({ childId, onAdd, onCancel }) {
+function DeviceVerifyFlow({ onAdd, onCancel }) {
   const [step, setStep] = useState('name')
   const [deviceName, setDeviceName] = useState('')
   const [phone, setPhone] = useState('')
@@ -249,46 +249,46 @@ export default function ManageAppsPage() {
                     </div>
                     <span className="app-row-edit">Edit →</span>
                   </div>
-                  <XBtn onClick={() => removeApp(Number(childId), 'timeRestricted', app.name)} label={app.name} />
+                  <XBtn onClick={() => removeApp(childId, 'timeRestricted', app.name)} label={app.name} />
                 </div>
               ))
             }
             <AddAppInput placeholder="Add an app (e.g. TikTok)"
-              onAdd={name => addApp(Number(childId), 'timeRestricted', name)} />
+              onAdd={name => addApp(childId, 'timeRestricted', name)} />
           </SectionCard>
 
           {/* Time-Unlimited */}
           <SectionCard title="Time-Unlimited Apps" color="var(--accent-teal)">
             {apps.timeUnlimited.length > 0 && (
               <div className="apps-tag-list" style={{ marginBottom: '0.75rem' }}>
-                {apps.timeUnlimited.map(name => (
-                  <span key={name} className="app-pill app-pill-teal">
-                    {name}
-                    <XBtn onClick={() => removeApp(Number(childId), 'timeUnlimited', name)} label={name} />
+                {apps.timeUnlimited.map(app => (
+                  <span key={app.id ?? app.name} className="app-pill app-pill-teal">
+                    {app.name}
+                    <XBtn onClick={() => removeApp(childId, 'timeUnlimited', app.name)} label={app.name} />
                   </span>
                 ))}
               </div>
             )}
             {apps.timeUnlimited.length === 0 && <p className="apps-empty">No unlimited apps added.</p>}
             <AddAppInput placeholder="Add an app (e.g. Khan Academy)"
-              onAdd={name => addApp(Number(childId), 'timeUnlimited', name)} />
+              onAdd={name => addApp(childId, 'timeUnlimited', name)} />
           </SectionCard>
 
           {/* Unauthorized */}
           <SectionCard title="Unauthorized (Blocked) Apps" color="var(--error)">
             {apps.unauthorized.length > 0 && (
               <div className="apps-tag-list" style={{ marginBottom: '0.75rem' }}>
-                {apps.unauthorized.map(name => (
-                  <span key={name} className="app-pill app-pill-red">
-                    {name}
-                    <XBtn onClick={() => removeApp(Number(childId), 'unauthorized', name)} label={name} />
+                {apps.unauthorized.map(app => (
+                  <span key={app.id ?? app.name} className="app-pill app-pill-red">
+                    {app.name}
+                    <XBtn onClick={() => removeApp(childId, 'unauthorized', app.name)} label={app.name} />
                   </span>
                 ))}
               </div>
             )}
             {apps.unauthorized.length === 0 && <p className="apps-empty">No blocked apps.</p>}
             <AddAppInput placeholder="Block an app (e.g. Discord)"
-              onAdd={name => addApp(Number(childId), 'unauthorized', name)} />
+              onAdd={name => addApp(childId, 'unauthorized', name)} />
           </SectionCard>
 
           {/* Connected Devices */}
@@ -313,7 +313,7 @@ export default function ManageAppsPage() {
                       <span className="device-name">{device.name}</span>
                       <span className="device-verified-badge">✓ Verified</span>
                       <button className="x-btn x-btn-device"
-                        onClick={() => removeDevice(Number(childId), device.id)} title="Disconnect">✕</button>
+                        onClick={() => removeDevice(childId, device.id)} title="Disconnect">✕</button>
                     </div>
                   ))}
                 </div>
@@ -322,8 +322,7 @@ export default function ManageAppsPage() {
 
             {showVerify
               ? <DeviceVerifyFlow
-                  childId={Number(childId)}
-                  onAdd={name => { addDevice(Number(childId), name); setShowVerify(false) }}
+                  onAdd={name => { addDevice(childId, name); setShowVerify(false) }}
                   onCancel={() => setShowVerify(false)}
                 />
               : (

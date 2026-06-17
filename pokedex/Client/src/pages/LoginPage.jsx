@@ -19,13 +19,13 @@ export default function LoginPage() {
     setError('')
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
     if (!form.usernameOrEmail || !form.password) {
       setError('Please enter your username/email and password.')
       return
     }
-    const ok = login(form.usernameOrEmail, form.password)
+    const ok = await login(form.usernameOrEmail, form.password)
     if (ok) {
       navigate('/dashboard')
     } else {

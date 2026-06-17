@@ -1,13 +1,13 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useApp } from '../context/AppContext'
+import { useNavigate, useLocation } from 'react-router-dom'
 
 export default function TermsPage() {
   const navigate = useNavigate()
-  const { pendingUser } = useApp()
+  const location = useLocation()
+  const form = location.state?.form
   const [agreed, setAgreed] = useState(false)
 
-  if (!pendingUser) {
+  if (!form) {
     return (
       <div className="page">
         <div className="card text-center">
@@ -88,7 +88,7 @@ export default function TermsPage() {
 
         <button
           className="btn btn-primary"
-          onClick={() => navigate('/confirm')}
+          onClick={() => navigate('/confirm', { state: { form } })}
           disabled={!agreed}
           style={{ opacity: agreed ? 1 : 0.45, cursor: agreed ? 'pointer' : 'not-allowed', marginTop: '1rem' }}
         >

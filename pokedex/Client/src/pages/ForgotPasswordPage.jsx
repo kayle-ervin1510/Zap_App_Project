@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 
 export default function ForgotPasswordPage() {
@@ -14,11 +14,16 @@ export default function ForgotPasswordPage() {
   const [pwForm, setPwForm] = useState({ next: '', confirm: '' })
   const [pwError, setPwError] = useState('')
 
-  function handleEmailSubmit(e) {
+  async function handleEmailSubmit(e) {
     e.preventDefault()
     setEmailError('')
     if (!email.trim() || !email.includes('@')) {
       setEmailError('Please enter a valid email address.')
+      return
+    }
+    const user = await findUserByEmail(email)
+    if (!user) {
+      setEmailError('No account found with that email address.')
       return
     }
     setStep('code')
@@ -34,7 +39,7 @@ export default function ForgotPasswordPage() {
     setStep('new-password')
   }
 
-  function handlePasswordSubmit(e) {
+  async function handlePasswordSubmit(e) {
     e.preventDefault()
     setPwError('')
     if (pwForm.next.length < 6) {
@@ -45,7 +50,7 @@ export default function ForgotPasswordPage() {
       setPwError('Passwords do not match.')
       return
     }
-    resetPassword(email, pwForm.next)
+    await resetPassword(email, pwForm.next)
     setStep('done')
     setTimeout(() => navigate('/login'), 2500)
   }

@@ -33,7 +33,7 @@ export default function Navbar() {
               onMouseEnter={e => (e.target.style.color = 'var(--accent-orange)')}
               onMouseLeave={e => (e.target.style.color = 'var(--text-secondary)')}
             >
-              {currentUser.preferredName || currentUser.firstName}
+              {currentUser.preferred_name || currentUser.first_name}
             </Link>
           </li>
         )}

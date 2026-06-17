@@ -140,7 +140,7 @@ export default function DashboardPage() {
             <h1 className="dashboard-title">
               Welcome back,{' '}
               <span className="text-orange">
-                {currentUser?.preferredName || currentUser?.firstName}
+                {currentUser?.preferred_name || currentUser?.first_name}
               </span>
             </h1>
             <p className="dashboard-subtitle">

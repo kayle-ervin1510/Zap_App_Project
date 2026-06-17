@@ -5,7 +5,7 @@ import Navbar from '../components/Navbar'
 
 export default function CreateChildPage() {
   const navigate = useNavigate()
-  const { addChild } = useApp()
+  const { addChild, error: contextError } = useApp()
 
   const [form, setForm] = useState({
     name: '',
@@ -20,14 +20,18 @@ export default function CreateChildPage() {
     setError('')
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
     if (!form.name.trim()) {
       setError('Child name is required.')
       return
     }
-    addChild(form)
-    navigate('/dashboard')
+    const newId = await addChild(form)
+    if (newId) {
+      navigate('/dashboard')
+    } else {
+      setError(contextError || 'Failed to create profile. Please try again.')
+    }
   }
 
   return (

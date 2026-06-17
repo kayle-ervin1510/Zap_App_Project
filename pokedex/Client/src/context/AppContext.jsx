@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useRef } from 'react'
+import { createContext, useContext, useState, useRef, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 import * as userService from '../services/userService'
 import * as childService from '../services/childService'
 import * as appService from '../services/appService'
@@ -211,6 +212,30 @@ export function AppProvider({ children }) {
   const [error, setError] = useState(null)
   const configuredRestrictions = useRef(new Set())
 
+  // Restore session on page reload
+  useEffect(() => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session?.user) return
+      try {
+        const user = await userService.fetchUserById(session.user.id)
+        if (!user) return
+        setCurrentUser(user)
+        const childPairs = await childService.fetchChildren(user.id)
+        const populated = await Promise.all(
+          childPairs.map(async ({ parentProfile, childProfile }) => {
+            const [apps, devices, restrictions] = await Promise.all([
+              appService.fetchAppsForChild(childProfile.id),
+              deviceService.fetchDevicesForChild(childProfile.id),
+              appService.fetchAppRestrictions(childProfile.id),
+            ])
+            return buildChildObject(parentProfile, childProfile, apps, devices, restrictions)
+          })
+        )
+        setChildren(populated)
+      } catch { /* session present but data unavailable — stay logged out */ }
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   function logActivity(childName, appName, action) {
     const now = new Date()
     const time = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
@@ -265,6 +290,7 @@ export function AppProvider({ children }) {
   }
 
   function logout() {
+    supabase.auth.signOut()
     setCurrentUser(null)
     setChildren([])
     setActivityLog([])
@@ -279,27 +305,26 @@ export function AppProvider({ children }) {
     }
   }
 
-  async function resetPassword(email, newPassword) {
+  async function resetPassword(email) {
     try {
-      const user = await userService.findUserByEmail(email)
-      if (!user) return
-      await userService.updateUser(user.id, { password: newPassword })
-      if (currentUser?.email?.toLowerCase() === email.toLowerCase()) {
-        setCurrentUser(prev => ({ ...prev, password: newPassword }))
-      }
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/forgot-password`,
+      })
+      if (error) setError(error.message)
     } catch (err) {
-      setError(err.response?.data?.message || err.message)
+      setError(err.message)
     }
   }
 
   async function deleteAccount() {
     try {
       setLoading(true)
-      // Delete all children first
       await Promise.all(children_.map(c =>
         childService.deleteChild(c.id, c.parentProfileId)
       ))
-      await userService.deleteUser(currentUser.id)
+      // delete_user_account() deletes auth.users which cascades to public.Users
+      await supabase.rpc('delete_user_account')
+      await supabase.auth.signOut()
       setChildren([])
       setCurrentUser(null)
     } catch (err) {
@@ -316,6 +341,13 @@ export function AppProvider({ children }) {
       if (updates.preferredName !== undefined) mapped.preferred_name = updates.preferredName
       if (updates.username !== undefined) mapped.username = updates.username
       if (updates.email !== undefined) mapped.email = updates.email
+
+      // Keep Supabase Auth in sync when email changes
+      if (updates.email !== undefined) {
+        const { error } = await supabase.auth.updateUser({ email: updates.email })
+        if (error) throw error
+      }
+
       await userService.updateUser(currentUser.id, mapped)
       setCurrentUser(prev => ({ ...prev, ...mapped, ...updates }))
     } catch (err) {
@@ -325,11 +357,15 @@ export function AppProvider({ children }) {
   }
 
   async function changePassword(currentPw, newPw) {
-    if (currentUser.password !== currentPw) return false
     try {
-      await userService.updateUser(currentUser.id, { password: newPw })
-      setCurrentUser(prev => ({ ...prev, password: newPw }))
-      return true
+      // Re-authenticate to verify current password before allowing a change
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email: currentUser.email,
+        password: currentPw,
+      })
+      if (verifyError) return false
+      const { error } = await supabase.auth.updateUser({ password: newPw })
+      return !error
     } catch {
       return false
     }
