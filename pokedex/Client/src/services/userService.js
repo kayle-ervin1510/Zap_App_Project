@@ -2,17 +2,20 @@ import { supabase } from '../lib/supabase'
 import api from './api'
 
 export async function createUser({ firstName, preferredName, username, email, password }) {
-  const { data: authData, error: authError } = await supabase.auth.signUp({ email, password })
-  if (authError) throw authError
-
-  const { data } = await api.post('/Users', {
-    id: authData.user.id,
-    first_name: firstName,
-    preferred_name: preferredName || firstName,
-    username,
+  const { data: authData, error: authError } = await supabase.auth.signUp({
     email,
+    password,
+    options: {
+      data: {
+        first_name: firstName,
+        preferred_name: preferredName || firstName,
+        username,
+      },
+    },
   })
-  return Array.isArray(data) ? data[0] : data
+  if (authError) throw authError
+  // public.Users row is created automatically by the on_auth_user_created trigger
+  return authData.user
 }
 
 export async function findUser(usernameOrEmail, password) {
