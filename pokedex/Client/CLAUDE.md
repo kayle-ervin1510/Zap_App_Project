@@ -89,6 +89,10 @@ All table interactions go through domain services — pages and the context neve
 ### Pages (`src/pages/`)
 One file per route. Pages call `useApp()` for data and mutations; they do not call services directly.
 
+**Page-specific notes:**
+- `ManageAppsPage` — contains an internal multi-step `DeviceVerifyFlow` component (`name → method → phone-entry → phone-code | install → done`). Both verification paths (`phone-entry` and `install`) are UI simulations: no SMS is actually sent, and the code check is client-side length validation only. `onAdd(deviceName)` is called directly after the user "confirms."
+- `BiometricsPage` — static informational/explainer page. Makes no Supabase calls; biometric auth is not yet implemented. It exists to educate parents about the concept.
+
 ### Styling
 Global CSS in `src/index.css` and `src/App.css`. Color scheme is derived from the Netflix show *BNA (Brand New Animal)*. CSS custom properties defined in `index.css`: `--bg-primary` (#0a0f1e), `--bg-card` (#111d35), `--accent-orange` (#f0592a), `--accent-teal` (#3ecfcf), `--accent-purple` (#8b5cf6). Fonts: Rajdhani (brand/headings), Inter (body). Shared layout classes: `.page`, `.card`, `.card-wide`, `.step-indicator`, `.step-dot`.
 
@@ -98,6 +102,16 @@ Global CSS in `src/index.css` and `src/App.css`. Color scheme is derived from th
 - `dailyGoalMinutes` on a child is session-only (the schema stores a boolean `screen_time_goal`, not a minute count).
 - `activityLog` is in-memory only and resets on page reload.
 - `@stripe/react-stripe-js` and `@stripe/stripe-js` are installed but not yet integrated.
+
+## Utility scripts (`scripts/`)
+
+These are Node ESM scripts run directly — not part of the build:
+
+| Script | Usage | Purpose |
+|---|---|---|
+| `api-verify.mjs` | `node scripts/api-verify.mjs` | Calls the Supabase REST API directly (no browser) to verify all newly-wired features. Reads `.env` automatically. |
+| `e2e-test.mjs` | `TEST_USER=x TEST_PASS=y node scripts/e2e-test.mjs` | Playwright browser walkthrough. Requires the dev server running on port 5174. |
+| `fix-rls.mjs` | `node scripts/fix-rls.mjs "postgresql://..."` | Connects directly to Postgres via `pg` and patches RLS policies. Pass the full connection string as the first argument (Supabase → Settings → Database → URI). |
 
 ## Environment variables
 
