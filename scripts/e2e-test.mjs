@@ -4,7 +4,7 @@
  */
 import { chromium } from 'playwright'
 
-const BASE = 'http://localhost:5174'
+const BASE = 'http://localhost:5173'
 
 // ── Change these to a real test account in your Supabase Users table ──
 const TEST_USER = process.env.TEST_USER || ''
@@ -59,12 +59,15 @@ log('redirected to dashboard', page.url().includes('/dashboard'))
 
 // ── 2. Pick a child ───────────────────────────────────────────────────
 console.log('\n[2] Pick first child')
-const childLinks = await page.$$('.child-card-actions .btn-teal')
-if (childLinks.length === 0) {
-  console.error('  No child cards found — create one first and re-run.')
+// Wait up to 8s for at least one child card to appear (data loads async after login)
+const firstCardBtn = await page.waitForSelector('.child-card-actions .btn-teal', { timeout: 8000 })
+  .catch(() => null)
+if (!firstCardBtn) {
+  console.error('  No child cards found — create one in the app first and re-run.')
   await browser.close()
   process.exit(1)
 }
+const childLinks = await page.$$('.child-card-actions .btn-teal')
 // Navigate to first child's apps page
 const firstManageBtn = await page.$$('.child-card-actions .btn-outline')
 const childCard = await page.$('.child-card')
@@ -98,18 +101,29 @@ log('device appears in UI', deviceRowTexts.includes(deviceName), deviceRowTexts.
 // ── 4. Persist check: reload and device still there ───────────────────
 console.log('\n[4] Reload and verify device persisted')
 await page.reload()
-await page.waitForURL(/\/dashboard\/.+\/apps/, { timeout: 5000 }).catch(() => {})
-await wait(1500)
-const reloadedDeviceRows = await page.$$('.device-row')
-const reloadedNames = await Promise.all(reloadedDeviceRows.map(r => r.$eval('.device-name', el => el.textContent)))
-log('device persists after reload', reloadedNames.includes(deviceName), reloadedNames.join(', '))
+// Wait for session restoration — ProtectedRoute redirects to /login if session is lost
+await page.waitForURL(/\/dashboard\/.+\/apps/, { timeout: 10000 }).catch(() => {})
+const urlAfterReload = page.url()
+console.log(`  URL after reload: ${urlAfterReload}`)
+let reloadedDeviceRows = []
+if (!urlAfterReload.includes('/dashboard')) {
+  log('still on dashboard after reload (session survived)', false, 'redirected to login — session lost on reload')
+} else {
+  // Wait for the device section to render
+  await page.waitForSelector('.device-row', { timeout: 8000 }).catch(() => {})
+  reloadedDeviceRows = await page.$$('.device-row')
+  const reloadedNames = await Promise.all(reloadedDeviceRows.map(r => r.$eval('.device-name', el => el.textContent)))
+  log('device persists after reload', reloadedNames.includes(deviceName), reloadedNames.join(', ') || '(no device rows found)')
+}
 
 // ── 5. Remove the device ──────────────────────────────────────────────
 console.log('\n[5] Remove device')
-const deviceRowToDelete = reloadedDeviceRows.find(async r => {
-  const n = await r.$eval('.device-name', el => el.textContent)
-  return n === deviceName
-})
+// Array.find doesn't work with async callbacks — iterate manually
+let deviceRowToDelete = null
+for (const r of reloadedDeviceRows) {
+  const n = await r.$eval('.device-name', el => el.textContent).catch(() => '')
+  if (n === deviceName) { deviceRowToDelete = r; break }
+}
 if (deviceRowToDelete) {
   const xBtn = await deviceRowToDelete.$('.x-btn-device')
   if (xBtn) {

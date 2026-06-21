@@ -22,9 +22,10 @@ function PublicRoute({ children }) {
   return currentUser ? <Navigate to="/dashboard" replace /> : children
 }
 
-// Redirect unauthenticated users to login
+// Redirect unauthenticated users to login; hold render during session restoration
 function ProtectedRoute({ children }) {
-  const { currentUser } = useApp()
+  const { currentUser, initializing } = useApp()
+  if (initializing) return null
   return currentUser ? children : <Navigate to="/login" replace />
 }
 

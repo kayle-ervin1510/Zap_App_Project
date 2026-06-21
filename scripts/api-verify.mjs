@@ -22,8 +22,27 @@ function log(label, ok, detail = '') {
   else     { console.error(`  ✗  ${label}${detail ? ' — ' + detail : ''}`); failed++ }
 }
 
-// ── Resolve jane_doe's Children_Profile id ────────────────────────────
-const { data: users } = await sb.from('Users').select('id').eq('username', 'jane_doe').single()
+// ── Authenticate (required — RLS blocks all queries without a session) ─
+const TEST_USER = process.env.TEST_USER || ''
+const TEST_PASS = process.env.TEST_PASS || ''
+if (!TEST_USER || !TEST_PASS) {
+  console.error('Set TEST_USER and TEST_PASS environment variables before running.')
+  console.error('  TEST_USER=myusername TEST_PASS=mypassword node scripts/api-verify.mjs')
+  process.exit(1)
+}
+
+// Resolve username → email via RPC (mirrors AppContext login flow)
+const { data: emailRow } = await sb.rpc('get_email_by_username', { p_username: TEST_USER })
+const email = emailRow || TEST_USER
+const { error: authErr } = await sb.auth.signInWithPassword({ email, password: TEST_PASS })
+if (authErr) {
+  console.error(`  ✗  sign-in failed — ${authErr.message}`)
+  process.exit(1)
+}
+console.log(`  ✓  signed in as ${email}\n`)
+
+// ── Resolve test user's Children_Profile id ───────────────────────────
+const { data: users } = await sb.from('Users').select('id').eq('username', TEST_USER).single()
 const userId = users?.id
 log('found test user', !!userId, userId)
 

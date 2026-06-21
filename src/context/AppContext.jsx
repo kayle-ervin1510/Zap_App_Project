@@ -210,15 +210,16 @@ export function AppProvider({ children }) {
   const [activityLog, setActivityLog] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [initializing, setInitializing] = useState(true)
   const configuredRestrictions = useRef(new Set())
 
   // Restore session on page reload
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session?.user) return
+      if (!session?.user) { setInitializing(false); return }
       try {
         const user = await userService.fetchUserById(session.user.id)
-        if (!user) return
+        if (!user) { setInitializing(false); return }
         setCurrentUser(user)
         const childPairs = await childService.fetchChildren(user.id)
         const populated = await Promise.all(
@@ -233,6 +234,7 @@ export function AppProvider({ children }) {
         )
         setChildren(populated)
       } catch { /* session present but data unavailable — stay logged out */ }
+      finally { setInitializing(false) }
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -674,6 +676,7 @@ export function AppProvider({ children }) {
         parentScreenTime: PARENT_SCREEN_TIME,
         activityLog,
         loading,
+        initializing,
         error,
         registerUser,
         verifyEmail,
