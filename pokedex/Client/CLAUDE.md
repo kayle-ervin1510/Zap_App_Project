@@ -40,7 +40,7 @@ Single React context (`AppContext`) wraps the entire tree. `useApp()` is the onl
 - `parentScreenTime` / child `screenTimeHistory` — **mock data** hardcoded in the context; no history table exists in the schema
 - `loading` / `error` — set/cleared around every async mutation; pages can read these for UI feedback
 
-**Session restoration:** On mount, `AppContext` calls `supabase.auth.getSession()`. If a session exists, it fetches the `Users` row and all children in parallel, then sets `currentUser`. If the fetch fails, the user is left logged out (silent failure).
+**Session restoration:** On mount, `AppContext` calls `supabase.auth.getSession()` and sets `initializing = true` until the check resolves. `ProtectedRoute` renders `null` while `initializing` is true to prevent a flash-redirect to `/login` before the session is confirmed. If the fetch fails, the user is left logged out (silent failure).
 
 **Key mutations exported from context:**
 
@@ -109,8 +109,9 @@ These are Node ESM scripts run directly — not part of the build:
 
 | Script | Usage | Purpose |
 |---|---|---|
-| `api-verify.mjs` | `node scripts/api-verify.mjs` | Calls the Supabase REST API directly (no browser) to verify all newly-wired features. Reads `.env` automatically. |
-| `e2e-test.mjs` | `TEST_USER=x TEST_PASS=y node scripts/e2e-test.mjs` | Playwright browser walkthrough. Requires the dev server running on port 5174. |
+| `api-verify.mjs` | `TEST_USER=x TEST_PASS=y node scripts/api-verify.mjs` | Calls the Supabase REST API directly (no browser) to verify all newly-wired features. Authenticates first (RLS blocks unauthenticated queries). Reads `.env` automatically. |
+| `e2e-test.mjs` | `TEST_USER=x TEST_PASS=y node scripts/e2e-test.mjs` | Playwright browser walkthrough. Requires the dev server running on port 5173. |
+| `login-diag.mjs` | `TEST_USER=x TEST_PASS=y node scripts/login-diag.mjs` | Step-by-step diagnosis of the login flow — useful when RLS or the `get_email_by_username` RPC is misbehaving. |
 | `fix-rls.mjs` | `node scripts/fix-rls.mjs "postgresql://..."` | Connects directly to Postgres via `pg` and patches RLS policies. Pass the full connection string as the first argument (Supabase → Settings → Database → URI). |
 
 ## Environment variables
