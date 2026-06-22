@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom'
 import { AppProvider, useApp } from './context/AppContext'
 import SignUpPage from './pages/SignUpPage'
 import TermsPage from './pages/TermsPage'
@@ -15,6 +15,15 @@ import BiometricsPage from './pages/BiometricsPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import DonatePage from './pages/DonatePage'
 import buyMeAMilkImg from './assets/buy_me_a_milk.png'
+
+function PageTransition({ children }) {
+  const location = useLocation()
+  return (
+    <div key={location.pathname} className="page-transition">
+      {children}
+    </div>
+  )
+}
 
 // Redirect already-authenticated users away from auth pages
 function PublicRoute({ children }) {
@@ -60,6 +69,7 @@ function AppRoutes() {
         />
       </Link>
     )}
+    <PageTransition>
     <Routes>
       <Route path="/" element={<Navigate to="/login" replace />} />
 
@@ -84,6 +94,7 @@ function AppRoutes() {
       {/* Catch-all */}
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
+    </PageTransition>
     </>
   )
 }
