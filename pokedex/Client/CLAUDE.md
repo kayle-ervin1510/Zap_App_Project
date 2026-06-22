@@ -67,9 +67,10 @@ Single React context (`AppContext`) wraps the entire tree. `useApp()` is the onl
 `configuredRestrictions` is a `useRef<Set>` storing `"childId:appName"` strings. It controls activity-log phrasing: first call → "You set X's restrictions to…", subsequent calls → "You added an additional…". It resets on logout.
 
 ### Transport layer
-Two separate transports are used — never mix them:
+Three transports are used — each has a distinct role, don't mix them:
 - **`src/lib/supabase.js`** — Supabase JS client. Used by `AppContext` directly for all Auth operations (`signInWithPassword`, `signOut`, `updateUser`, `resetPasswordForEmail`, `rpc`).
 - **`src/services/api.js`** — Axios instance pointed at the Supabase REST endpoint, injects the session JWT on every request. Used by all service files for table CRUD.
+- **Raw `fetch`** — used only in `DonatePage.jsx` to call the Supabase Edge Function `process-donation`. It manually injects `Authorization: Bearer <access_token>` and `apikey` headers retrieved from `supabase.auth.getSession()`.
 
 ### Service layer (`src/services/`)
 All table interactions go through domain services — pages and the context never call `api.js` directly:
@@ -92,6 +93,7 @@ One file per route. Pages call `useApp()` for data and mutations; they do not ca
 **Page-specific notes:**
 - `ManageAppsPage` — contains an internal multi-step `DeviceVerifyFlow` component (`name → method → phone-entry → phone-code | install → done`). Both verification paths (`phone-entry` and `install`) are UI simulations: no SMS is actually sent, and the code check is client-side length validation only. `onAdd(deviceName)` is called directly after the user "confirms."
 - `BiometricsPage` — static informational/explainer page. Makes no Supabase calls; biometric auth is not yet implemented. It exists to educate parents about the concept.
+- `DonatePage` — fully integrated Stripe donation flow. Uses `@stripe/react-stripe-js` `CardElement` + `useStripe`/`useElements`. On submit, calls the Supabase Edge Function `process-donation` to create a PaymentIntent, then confirms the card payment client-side. `VITE_STRIPE_PUBLIC_KEY` must be set for this page to function.
 
 ### Styling
 Global CSS in `src/index.css` and `src/App.css`. Color scheme is derived from the Netflix show *BNA (Brand New Animal)*. CSS custom properties defined in `index.css`: `--bg-primary` (#0a0f1e), `--bg-card` (#111d35), `--accent-orange` (#f0592a), `--accent-teal` (#3ecfcf), `--accent-purple` (#8b5cf6). Fonts: Rajdhani (brand/headings), Inter (body). Shared layout classes: `.page`, `.card`, `.card-wide`, `.step-indicator`, `.step-dot`.
@@ -101,24 +103,36 @@ Global CSS in `src/index.css` and `src/App.css`. Color scheme is derived from th
 - `screenTimeHistory` and `parentScreenTime` are hardcoded mock data — no history table exists in the schema.
 - `dailyGoalMinutes` on a child is session-only (the schema stores a boolean `screen_time_goal`, not a minute count).
 - `activityLog` is in-memory only and resets on page reload.
-- `@stripe/react-stripe-js` and `@stripe/stripe-js` are installed but not yet integrated.
 
-## Utility scripts (`scripts/`)
+## Utility scripts
 
-These are Node ESM scripts run directly — not part of the build:
+Scripts in `scripts/` are Node ESM utilities — not part of the build:
 
 | Script | Usage | Purpose |
 |---|---|---|
-| `api-verify.mjs` | `TEST_USER=x TEST_PASS=y node scripts/api-verify.mjs` | Calls the Supabase REST API directly (no browser) to verify all newly-wired features. Authenticates first (RLS blocks unauthenticated queries). Reads `.env` automatically. |
-| `e2e-test.mjs` | `TEST_USER=x TEST_PASS=y node scripts/e2e-test.mjs` | Playwright browser walkthrough. Requires the dev server running on port 5173. |
-| `login-diag.mjs` | `TEST_USER=x TEST_PASS=y node scripts/login-diag.mjs` | Step-by-step diagnosis of the login flow — useful when RLS or the `get_email_by_username` RPC is misbehaving. |
-| `fix-rls.mjs` | `node scripts/fix-rls.mjs "postgresql://..."` | Connects directly to Postgres via `pg` and patches RLS policies. Pass the full connection string as the first argument (Supabase → Settings → Database → URI). |
+| `scripts/api-verify.mjs` | `TEST_USER=x TEST_PASS=y node scripts/api-verify.mjs` | Calls the Supabase REST API directly (no browser) to verify all newly-wired features. Authenticates first (RLS blocks unauthenticated queries). Reads `.env` automatically. |
+| `scripts/e2e-test.mjs` | `TEST_USER=x TEST_PASS=y node scripts/e2e-test.mjs` | Playwright browser walkthrough. Requires the dev server running on port 5173. |
+| `scripts/login-diag.mjs` | `TEST_USER=x TEST_PASS=y node scripts/login-diag.mjs` | Step-by-step diagnosis of the login flow — useful when RLS or the `get_email_by_username` RPC is misbehaving. |
+| `scripts/fix-rls.mjs` | `node scripts/fix-rls.mjs "postgresql://..."` | Connects directly to Postgres via `pg` and patches RLS policies. Pass the full connection string as the first argument (Supabase → Settings → Database → URI). |
+
+Scripts in the Client root directory:
+
+| Script | Usage | Purpose |
+|---|---|---|
+| `donate-test.mjs` | `node donate-test.mjs` | Creates a Supabase test user, then drives a Playwright/Chrome browser to submit a Stripe test-card donation. Requires `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `STRIPE_SECRET_KEY` env vars. Uses a Chrome binary extracted to `/tmp/chrome-extract`. |
+| `test-donation.mjs` | `node test-donation.mjs` | Lighter Playwright/Firefox walkthrough of the donation flow. Reads `.env` automatically. |
 
 ## Environment variables
+
+Place in `Client/.env` (not committed). `VITE_`-prefixed vars are exposed to the browser by Vite.
 
 | Variable | Purpose |
 |---|---|
 | `VITE_SUPABASE_URL` | Supabase project REST URL |
 | `VITE_SUPABASE_ANON_KEY` | Supabase public anon key |
+| `VITE_STRIPE_PUBLIC_KEY` | Stripe publishable key — required for `DonatePage` |
+| `STRIPE_SECRET_KEY` | Stripe secret key — only used by `donate-test.mjs` (never in browser code) |
 
-Both must be prefixed `VITE_` to be exposed by Vite. Place in `Client/.env` (not committed).
+## Deployment
+
+`vercel.json` configures Vercel for SPA mode: `npm run build` → `dist/`, with a catch-all rewrite `/(.*) → /index.html`. `installCommand` is `npm install --include=dev` so Vite is available at build time.
