@@ -21,37 +21,13 @@ export default function Navbar() {
         <li><Link to="/contact">Contact</Link></li>
         {currentUser && (
           <li>
-            <Link
-              to="/profile"
-              style={{
-                color: 'var(--text-secondary)',
-                fontSize: '0.85rem',
-                fontWeight: 500,
-                textDecoration: 'none',
-                transition: 'color 0.15s',
-              }}
-              onMouseEnter={e => (e.target.style.color = 'var(--accent-orange)')}
-              onMouseLeave={e => (e.target.style.color = 'var(--text-secondary)')}
-            >
+            <Link to="/profile" className="nav-profile-link">
               {currentUser.preferred_name || currentUser.first_name}
             </Link>
           </li>
         )}
         <li>
-          <button
-            onClick={handleLogout}
-            style={{
-              background: 'var(--accent-orange)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '6px',
-              padding: '0.35rem 0.9rem',
-              fontSize: '0.85rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              fontFamily: 'Inter, sans-serif',
-            }}
-          >
+          <button onClick={handleLogout} className="nav-logout-btn">
             Log Out
           </button>
         </li>

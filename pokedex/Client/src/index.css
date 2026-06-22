@@ -391,6 +391,41 @@ body {
   color: var(--accent-orange);
 }
 
+.nav-profile-link {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.nav-profile-link:hover {
+  color: var(--accent-orange);
+}
+
+.nav-logout-btn {
+  background: var(--accent-orange);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.35rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  transition: background 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+
+.nav-logout-btn:hover {
+  background: var(--accent-orange-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(240, 89, 42, 0.35);
+}
+
+.nav-logout-btn:active {
+  transform: translateY(0);
+}
+
 /* ── Step indicator ── */
 .step-indicator {
   display: flex;
